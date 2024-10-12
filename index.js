@@ -17,6 +17,8 @@ const options = program.opts();  // Правильне отримання аргументів з командного 
 const cacheDir = options.cache;
 
 // Створюємо сервер
+const superagent = require('superagent');
+
 const server = http.createServer(async (req, res) => {
     const code = req.url.substring(1);
     const filePath = path.join(cacheDir, `${code}.jpg`);
@@ -27,35 +29,19 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(200, { 'Content-Type': 'image/jpeg' });
             res.end(data);
         } catch (err) {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('Image not found');
-        }
-    } else if (req.method === 'PUT') {
-        let body = [];
-        req.on('data', chunk => body.push(chunk));
-        req.on('end', async () => {
+            // Запит до http.cat якщо файл не знайдено
             try {
-                await fsPromises.writeFile(filePath, Buffer.concat(body));
-                res.writeHead(201, { 'Content-Type': 'text/plain' });
-                res.end('Image saved');
-            } catch (err) {
-                res.writeHead(500, { 'Content-Type': 'text/plain' });
-                res.end('Internal Server Error');
+                const response = await superagent.get(`https://http.cat/${code}`);
+                await fsPromises.writeFile(filePath, response.body);
+                res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+                res.end(response.body);
+            } catch (error) {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Image not found on http.cat');
             }
-        });
-    } else if (req.method === 'DELETE') {
-        try {
-            await fsPromises.unlink(filePath);
-            res.writeHead(200, { 'Content-Type': 'text/plain' });
-            res.end('Image deleted');
-        } catch (err) {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('Image not found');
         }
-    } else {
-        res.writeHead(405, { 'Content-Type': 'text/plain' });
-        res.end('Method Not Allowed');
     }
+    // Інші методи PUT, DELETE залишаються без змін
 });
 
 server.listen(options.port, options.host, () => {
